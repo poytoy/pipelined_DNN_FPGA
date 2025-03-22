@@ -1,0 +1,580 @@
+module fixed_point_multiplier_16x16(
+// multiply as if its integer then adjust!, calculate sign seperately
+//Q8.7
+    input  logic  [15:0] a,       // Q8.7 fixed-point input
+    input  logic  [15:0] b,       // Q8.7 fixed-point input
+    output logic  [31:0] product  // Q16.15 fixed-point output
+);
+logic sign_a, sign_b;
+logic[14:0] a_uns, b_uns;
+logic [31:0] raw_product;
+
+// Extract the sign bit
+assign sign_a = a[15];  // MSB is the sign bit
+assign sign_b = b[15];
+assign a_uns=a[14:0];
+assign b_uns=b[14:0];
+logic[15:0] a_abs;
+logic[15:0] b_abs;
+assign a_abs={1'b0,a_uns};
+assign b_abs={1'b0,b_uns};
+
+
+assign raw_product=(a_abs*b_abs)<<1; 
+
+logic sign_product;
+assign sign_product = sign_a ^ sign_b;
+assign product ={sign_product,raw_product[30:0]};
+
+
+endmodule
+
+module fixed_point_adder#(
+    parameter int N_Inputs      = 3,    
+    parameter int Integer_bits = 16,
+    parameter int Fraction_bits =15,
+    parameter int Output_width =  1 + (Integer_bits + $clog2(N_Inputs+1)) + Fraction_bits
+   
+)(
+    input logic signed [(1+ Integer_bits + Fraction_bits)-1:0] in [N_Inputs-1:0],
+    input logic signed [15:0] bias,
+    output logic signed [(1+(Integer_bits+($clog2(N_Inputs+1)))+Fraction_bits)-1:0] sum
+    );
+    //array for extended version of each input
+    localparam int Extra_Bits = $clog2(N_Inputs+1);
+    
+    localparam int Input_width = 1 + Integer_bits + Fraction_bits;
+    logic signed [Output_width-1:0] extended [N_Inputs-1:0];
+
+    genvar i;
+    generate //generate block to add extra int to each input
+        for(i=0;i<N_Inputs;i++) begin : extend_inputs
+            assign extended[i] = {
+                in[i][Input_width-1], //sign bit
+                {Extra_Bits{1'b0}},//extra bit 0 since not 2's compliment
+                in[i][Input_width-2:Fraction_bits],//integer bits
+                in[i][Fraction_bits-1:0]//fraction bits
+            };
+            end
+    endgenerate
+    //very bad and resource consumeing implementation, but works.
+    logic [Output_width-1:0] cumulative_sum [N_Inputs:0];
+    logic[Output_width-1:0] bias_ext;
+    assign bias_ext={bias[15],{Extra_Bits{1'b0}},{8'b0},bias[14:0],{8'b0}};
+    assign cumulative_sum[0] = bias_ext;//add bias as first thing
+    //sum all inputs
+    genvar j;
+    generate
+        for (j = 0; j < N_Inputs; j = j + 1) begin : gen_point_multiplier
+            fixed_point_adder_2#(.WIDTH(Output_width))fixed_point_multiplier (
+                .a(cumulative_sum[j]),
+                .b(extended[j]),
+                .sum(cumulative_sum[j+1])
+            );
+        end
+    endgenerate
+    assign sum = cumulative_sum[N_Inputs];
+endmodule
+module fixed_point_adder_2 #(
+    parameter int WIDTH = 32
+)(
+    input  logic signed [WIDTH-1:0] a,
+    input  logic signed [WIDTH-1:0] b,
+    output logic signed [WIDTH-1:0]   sum
+);
+logic [WIDTH-2:0] a_uns;
+logic [WIDTH-2:0] b_uns;
+logic[WIDTH-2:0] sum_inter;
+logic sign_a;
+logic sign_b;
+logic sign_res;
+assign a_uns=a[WIDTH-2:0];
+assign b_uns=b[WIDTH-2:0];
+assign sign_a=a[WIDTH-1];
+assign sign_b=b[WIDTH-1];
+always_comb begin
+    if (sign_a ^ sign_b) begin
+        if (a_uns>=b_uns)begin
+            sum_inter=a_uns-b_uns;
+            sign_res=sign_a;
+        end else begin
+            sum_inter=b_uns-a_uns;
+            sign_res=sign_b;
+        end 
+    end else begin
+        sum_inter=a_uns+b_uns;
+        sign_res = sign_a;
+    end
+end
+assign sum ={sign_res,sum_inter};
+
+endmodule
+
+module relu6#(
+    parameter int Input_Width=32 //output width of adder
+)(
+    input logic signed[Input_Width-1:0] a,
+    output logic signed[15:0] result
+);
+    logic sing_a;
+    assign sign_a=a[Input_Width-1];
+    logic signed[Input_Width-2:0] mag_a;
+    assign mag_a=a[Input_Width-2:0];
+    logic signed[7:0] int_a;//int part
+    logic signed[6:0] frac_a;//frac part
+    assign int_a = mag_a[22:15];
+    assign frac_a=mag_a[14:8];
+//wierd num below is 6 in qx.15 fixed notataion
+always_comb begin
+        if (mag_a > 31'b0000000000000110_000000000000000) begin
+            result=16'b0_00000110_0000000;
+        end else if (sign_a == 1) begin
+            result=16'h0000;
+        end else begin
+            result={sign_a,int_a,frac_a};
+        end
+    end
+endmodule
+
+module neuron2#(
+    parameter int Num_Inpt=5
+)(//16 bit inputs
+    input logic signed [15:0] in [Num_Inpt-1:0],//input bus with dynamicc witdh to accomidate dynamic input
+    input logic signed[15:0] Weight[Num_Inpt-1:0],
+    input logic signed [15:0] bias,
+    output logic signed[15:0] out
+);
+logic signed [31:0] inter1 [(Num_Inpt-1):0];
+logic signed [(32+$clog2(Num_Inpt+1))-1:0] inter2;
+
+
+genvar i;
+    generate
+        for (i = 0; i < Num_Inpt; i = i + 1) begin : gen_point_multiplier
+            fixed_point_multiplier_16x16 fixed_point_multiplier (
+                .a(in[i]),
+                .b(Weight[i]),
+                .product(inter1[i])
+            );
+        end
+    endgenerate
+
+fixed_point_adder#(
+    .N_Inputs(Num_Inpt),    
+    .Integer_bits(16),
+    .Fraction_bits(15)
+) fixed_point_adder(
+    .in(inter1),
+    .bias(bias),
+    .sum(inter2)
+);
+
+relu6#(
+.Input_Width(32+$clog2(Num_Inpt+1))
+)relu(
+.a(inter2),
+.result(out)
+);
+endmodule
+   
+module layer2#(
+    parameter int Num_Neurons = 15,
+    parameter int Num_Inpt_Per_Neuron = 15 //value of previous num neuron.  
+)(
+    input logic signed[15:0] weights[Num_Neurons-1:0][Num_Inpt_Per_Neuron-1:0],
+    input logic signed[15:0] bias[Num_Neurons-1:0],
+    input logic signed[15:0] in_data [Num_Inpt_Per_Neuron-1:0],
+    output logic signed[15:0] out_data [Num_Neurons-1:0]
+);
+//this for flattening the weihts double array.
+genvar n, j;
+generate
+  for (n = 0; n < Num_Neurons; n = n + 1) begin: neuron_inst
+    // Temporary wire array to hold the weights for neuron n
+    logic signed [15:0] weight_temp [Num_Inpt_Per_Neuron-1:0];
+
+    // Assign each element from weights[n] to weight_temp
+    for (j = 0; j < Num_Inpt_Per_Neuron; j = j + 1) begin: assign_weights
+      assign weight_temp[j] = weights[n][j];
+    end
+
+    // Instantiate the neuron with the temporary weight array
+    neuron2 #(
+      .Num_Inpt(Num_Inpt_Per_Neuron)
+    ) neuron_inst (
+      .in(in_data),
+      .Weight(weight_temp), // Now using the temporary array
+      .bias(bias[n]),
+      .out(out_data[n])
+    );
+  end
+endgenerate
+endmodule
+
+// module accelerator#(
+//     parameter int L1_Num_Neuron=5,
+//     parameter int L1_Num_Inpt_Per_Neuron = 15,
+//     parameter int L2_Num_Neuron=15
+// )(
+// //inputs of first layer
+// input logic signed[15:0] weights1 [L1_Num_Neuron-1:0][L1_Num_Inpt_Per_Neuron-1:0],
+// input logic signed [15:0] bias1 [L1_Num_Neuron-1:0],
+// input logic signed[15:0] in_data1 [L1_Num_Inpt_Per_Neuron-1:0],
+// input  logic signed [15:0] weights2 [L2_Num_Neuron-1:0][L1_Num_Neuron-1:0],
+// input logic signed [15:0] bias2 [L2_Num_Neuron-1:0],
+// output logic signed [15:0] out_data2 [L2_Num_Neuron-1:0]
+// );
+// //inter-bus that connects 1 to 2 so out_one
+// logic signed [15:0] intermediate [L1_Num_Neuron-1:0];
+// //first layer!
+// layer2 #(
+//     .Num_Neurons(L1_Num_Neuron),
+//     .Num_Inpt_Per_Neuron(L1_Num_Inpt_Per_Neuron)
+//   ) layer_1 (
+//     .weights(weights1),
+//     .bias(bias1),
+//     .in_data(in_data1),
+//     .out_data(intermediate)
+//   );
+//   //L2 num ninpt per neuron is l1 num neuron
+// layer2 #(
+//     .Num_Neurons(L2_Num_Neuron),
+//     .Num_Inpt_Per_Neuron(L1_Num_Neuron)
+// )layer_2(
+//     .weights(weights2),
+//     .bias(bias2),
+//     .in_data(intermediate),
+//     .out_data(out_data2)
+// );
+// endmodule
+module chained_layer_fsm#(
+    parameter int L1_Num_Neuron=15,//L1_num input per neuron will be l2 num neuron. 
+    parameter int L2_Num_Neuron=15
+)(
+//inputs of first layer
+input logic  clk,
+input logic  rst,
+input logic  start,
+input logic btn,
+//acc weight and bias and initial data is provided 
+input logic signed[15:0] weights1 [L1_Num_Neuron-1:0][L2_Num_Neuron-1:0],
+input logic signed [15:0] bias1 [L1_Num_Neuron-1:0],
+input logic signed[15:0] in_data1 [L2_Num_Neuron-1:0],
+input  logic signed [15:0] weights2 [L2_Num_Neuron-1:0][L1_Num_Neuron-1:0],
+input logic signed [15:0] bias2 [L2_Num_Neuron-1:0],
+//output logic signed [15:0] out_data2 [L2_Num_Neuron-1:0],
+// FBGA leds implemented
+output logic [15:0]leds 
+);
+//fsm state logic 
+typedef enum logic [2:0] {
+    START,          // wait for init signal of btn
+    WRITE_TO_BRAM,  // write in_data1 into bram
+    READ_TO_REGS,   // read from bram into accelerator
+    COMPUTE,        // accelerator computes and out_data2 is written into bram
+    READ_TO_LEDS    // Read data from BRAM and display on LEDs fbga part.
+  } state_t;
+  state_t state, next_state;
+
+//accelerator
+logic signed[15:0] accel_regs [L2_Num_Neuron-1:0];
+logic signed[15:0] accel_out [L2_Num_Neuron-1:0];
+
+logic signed[15:0] in_data_inter [L2_Num_Neuron-1:0];
+logic signed[15:0] in_data_inter2 [L2_Num_Neuron-1:0];
+
+logic signed[15:0] weights1_reg[L1_Num_Neuron-1:0][L2_Num_Neuron-1:0];
+logic signed[15:0] weights2_reg[L2_Num_Neuron-1:0][L1_Num_Neuron-1:0];
+logic signed[15:0] bias1_reg[L1_Num_Neuron-1:0];
+logic signed[15:0] bias2_reg[L2_Num_Neuron-1:0];
+//these break the parametric nature, works based on the assumption that L2_neuron and L1_neuron count is the same
+logic signed[15:0]bias_reg[L2_Num_Neuron-1:0];
+logic signed[15:0]weights_reg[L1_Num_Neuron-1:0][L2_Num_Neuron-1:0];
+
+layer2#(
+    .Num_Neurons(L1_Num_Neuron),
+    .Num_Inpt_Per_Neuron(L2_Num_Neuron)
+    
+)ac(
+.weights(weights_reg),
+.bias(bias_reg),
+.in_data(accel_regs), //accel regs is input 
+.out_data(accel_out)//accel_out regs are output.
+);
+//bram
+//lets assign addr width to be the same as accelerator output. so
+
+logic ram_we; //write enable to mimic ram
+logic [15:0] ram_din; //in
+logic [15:0] ram_dout; //out
+logic [5:0]ram_addr;
+reg [15:0] ram_shifter[624:0];
+rams_dist bram(
+    .clk(clk),
+    .we(ram_we),
+    .a(ram_addr),
+    .di(ram_din),
+    .spo(ram_dout)
+  );
+//to determine if we read to leds or compute again.
+logic [1:0] round_count;
+//to determine what value to read to leds, there is 5 output. 
+logic [2:0] num_to_show;
+
+
+
+
+
+
+//we need different button for each state since fbga is not ideal.(double state passes)
+always_comb begin
+    //assign write permissions
+    ram_we =((state==WRITE_TO_BRAM)||(state==COMPUTE));
+    // Default assignment to avoid latches
+    next_state = state;
+    case (state)
+        START:begin
+            if(start)begin next_state=WRITE_TO_BRAM;end
+        end
+        WRITE_TO_BRAM:begin
+            // Stay in WRITE_TO_BRAM until all data is written.
+            if (write_done)begin
+                if(round_count<2)
+                    next_state = READ_TO_REGS;end 
+                else
+                    next_state = READ_TO_LEDS;
+             
+        end
+        READ_TO_REGS: begin
+            if(read_done)begin
+            next_state = COMPUTE;end
+        end
+        COMPUTE:begin
+            next_state = WRITE_TO_BRAM; end
+        READ_TO_LEDS: begin next_state=READ_TO_LEDS;end
+    endcase 
+end
+//synchroneous state update.
+
+
+//assign pointers for ram.
+// logic[5:0] ptrin;//pointer to initial input section, L2_Num_Neuron section is reserved.
+// logic[5:0] ptrw1;//weigts 1 section as big as L1_Num_Neuron*L2_Num_Neuron
+// logic[5:0] ptrw2;//weights 2 section size as big as L1_Num_Neuron*L2_Num_Neuron*l2
+// logic[5:0] ptrb1;//bias 1 section size as big as L1_Num_Neuron
+// logic[5:0] ptrb2;//bias 2 section size as big as L2_Num_Neuron
+logic[15:0] writer_count;//write all info to all sections section size 2_Num_Neuron+2*(L1_Num_Neuron*L2_Num_Neuron)+L1_Num_Neuron+L2_Num_Neuron
+logic[15:0] reader_count;
+// assign ptrin=5'b0;
+// assign ptrw1=L2_Num_Neuron-1;
+// assign ptrw2=L2_Num_Neuron+(L1_Num_Neuron*L2_Num_Neuron)-1;
+
+// assign ptrb1=L2_Num_Neuron+2*(L1_Num_Neuron*L2_Num_Neuron)-1;
+// assign ptrb2=L2_Num_Neuron+2*(L1_Num_Neuron*L2_Num_Neuron)+L1_Num_Neuron-1;//15 size so total usage in ram is=L2_Num_Neuron+2*(L1_Num_Neuron*L2_Num_Neuron)+5-1+15
+
+logic write_done;//flag for when write op is done.
+logic read_done;
+logic signed [15:0] flat_weights1 [(L1_Num_Neuron * L2_Num_Neuron)-1:0];
+logic signed [15:0] flat_weights2 [(L1_Num_Neuron * L2_Num_Neuron)-1:0];
+
+
+//flatte weights so we can write them to bram
+integer i, j, index;
+
+initial begin
+  index = 0;
+  // Loop through each row (L1_Num_Neuron)
+  for (i = 0; i < L1_Num_Neuron; i = i + 1) begin
+    // Loop through each column (L2_Num_Neuron)
+    for (j = 0; j < L2_Num_Neuron; j = j + 1) begin
+      flat_weights1[index] = weights1[i][j];
+      index = index + 1;
+    end
+  end
+end
+integer n, m, index2;
+
+initial begin
+  index = 0;
+  // Loop through each row (L1_Num_Neuron)
+  for (n = 0; n < L1_Num_Neuron; n = n + 1) begin
+    // Loop through each column (L2_Num_Neuron)
+    for (m = 0; m < L2_Num_Neuron; m = m + 1) begin
+      flat_weights2[index2] = weights2[n][m];
+      index = index + 1;
+    end
+  end
+end
+
+
+//fsm logic
+always_ff @(posedge clk or posedge rst)begin
+       if (rst) begin
+        writer_count <= 5'b0;
+        state<=START;
+        write_done <= 1'b0;
+        for (int j = 0; j < L1_Num_Neuron; j++) begin
+            leds[j] <= 0;
+            end
+       end else if(rst!=1) begin state<=next_state;end
+         else if(state==WRITE_TO_BRAM)begin
+            ram_addr<=writer_count;
+            if (round_count < 2'd2)begin
+            round_count <= round_count + 1;end
+            else begin
+            round_count <= 2'd0;end
+
+            //write in data
+            
+            if(writer_count<L2_Num_Neuron)begin
+                ram_din<=in_data1[writer_count];end 
+                else if(writer_count<L2_Num_Neuron+L1_Num_Neuron)begin
+                    ram_din<=accel_out[writer_count-L1_Num_Neuron];end//write the output of first layer into it.
+                else if(writer_count<L2_Num_Neuron+(L1_Num_Neuron*L2_Num_Neuron)+L1_Num_Neuron)begin//as big as weight1 size
+                    ram_din<=flat_weights1[writer_count-(L2_Num_Neuron+L1_Num_Neuron)];end                     
+                    else if(writer_count<L2_Num_Neuron+2*(L1_Num_Neuron*L2_Num_Neuron)+L1_Num_Neuron)begin
+                        ram_din<=flat_weights2[writer_count-(L2_Num_Neuron+(L1_Num_Neuron*L2_Num_Neuron)+L1_Num_Neuron)];end 
+                        
+                        else if(writer_count<(L2_Num_Neuron + 2*(L1_Num_Neuron * L2_Num_Neuron) + L1_Num_Neuron+L1_Num_Neuron))begin
+                            ram_din<=bias1[writer_count-(L2_Num_Neuron+L1_Num_Neuron+2*(L1_Num_Neuron*L2_Num_Neuron))];end
+                            
+                            else if(writer_count<L2_Num_Neuron + 2*(L1_Num_Neuron * L2_Num_Neuron) + L1_Num_Neuron+L2_Num_Neuron+L1_Num_Neuron)begin
+                                ram_din<=bias2[writer_count-(L2_Num_Neuron + 2*(L1_Num_Neuron * L2_Num_Neuron) + L1_Num_Neuron + L1_Num_Neuron)];end
+                            //increment writer_count
+            if(writer_count==L2_Num_Neuron + 2*(L1_Num_Neuron * L2_Num_Neuron) + L1_Num_Neuron+L2_Num_Neuron+L1_Num_Neuron)begin
+                //means the end
+                writer_count<=0;
+                write_done<=1'b1;
+            end else begin
+                //means still not the end so increase
+                writer_count<=writer_count+1;
+            end
+                            
+        end else if (state == READ_TO_REGS) begin
+            ram_addr <= reader_count;//writer count is 0'd
+            
+            // Read the BRAM output and assign to the accelerator registers
+            //shift bram outputs by one to accomidate delay.
+            // also we will read 1 more then usual to get the last data in ram in.
+            if(reader_count<(L2_Num_Neuron+2*(L1_Num_Neuron*L2_Num_Neuron)+L1_Num_Neuron+L2_Num_Neuron+L1_Num_Neuron)+1)begin //read all in bram. add to another logic.
+                ram_shifter[reader_count]<=ram_dout;end
+            if(reader_count==(L2_Num_Neuron+2*(L1_Num_Neuron*L2_Num_Neuron)+L1_Num_Neuron+L2_Num_Neuron+L1_Num_Neuron)+1)begin
+                //ends here
+                reader_count <= 0;//also used as reader count here
+            end else begin
+                //means still not the end so increase
+                reader_count<=reader_count+1;
+            end
+
+            //we will use ram_shifter instead of ram_dout and ignore the first element written to accomidate for the delay,
+            
+            // Check if all L2_Num_Neuron words have been read
+            if (writer_count <(L2_Num_Neuron)) begin
+                in_data_inter[writer_count] <= ram_shifter[writer_count+1];end
+                if(writer_count<(L2_Num_Neuron+L1_Num_Neuron))begin
+                    int idx0;
+                    idx0=writer_count-L2_Num_Neuron;
+                    in_data_inter2[idx0] <=  ram_shifter[writer_count+1];end
+                else if (writer_count<(L2_Num_Neuron+(L1_Num_Neuron*L2_Num_Neuron)+L1_Num_Neuron))begin//start to read weights one.
+                    int idx;//idx=0 internal count
+                    idx = writer_count - L2_Num_Neuron-L1_Num_Neuron;
+                    // Map the flat index into 2D indices.
+                    weights1_reg[idx / L2_Num_Neuron][idx % L2_Num_Neuron] <=  ram_shifter[writer_count+1];end
+
+                    else if(writer_count<(L2_Num_Neuron+2*(L1_Num_Neuron*L2_Num_Neuron)+L1_Num_Neuron))begin
+                        int idx2;
+                        idx2=writer_count -L1_Num_Neuron - L2_Num_Neuron - (L1_Num_Neuron * L2_Num_Neuron);//idx2=0 internal count
+                        //map indices.
+                        weights2_reg[idx2 / L1_Num_Neuron][idx2 % L1_Num_Neuron ]<= ram_shifter[writer_count+1];end
+
+                        else if(writer_count<(L2_Num_Neuron+2*(L1_Num_Neuron*L2_Num_Neuron)+L1_Num_Neuron+L1_Num_Neuron))begin
+                            int idx3;
+                            idx3 = writer_count - (L2_Num_Neuron + 2*(L1_Num_Neuron * L2_Num_Neuron)+L1_Num_Neuron);//idx3=0 for internal count
+                            bias1_reg[idx3] <=  ram_shifter[writer_count+1];end
+
+                            else if(writer_count<(L2_Num_Neuron+2*(L1_Num_Neuron*L2_Num_Neuron)+L1_Num_Neuron+L2_Num_Neuron+L1_Num_Neuron))begin
+                                int idx4;
+                                idx4 = writer_count - (L2_Num_Neuron + 2*(L1_Num_Neuron * L2_Num_Neuron) + L1_Num_Neuron + L1_Num_Neuron);
+                                bias2_reg[idx4] <=  ram_shifter[writer_count+1];end
+            
+            if(writer_count==(L2_Num_Neuron+2*(L1_Num_Neuron*L2_Num_Neuron)+L1_Num_Neuron+L2_Num_Neuron+L1_Num_Neuron))begin
+                //ends here
+                writer_count <= 0;//also used as reader count here
+                read_done    <= 1'b1;
+            end else begin
+                //means still not the end so increase
+                writer_count<=writer_count+1;
+            end
+
+        end else if(state==COMPUTE) begin 
+            if(round_count==1)begin
+            //first run
+            for (int i = 0; i < L1_Num_Neuron; i++) begin
+                for (int j = 0; j < L2_Num_Neuron; j++) begin
+                weights_reg[i][j] <= weights1_reg[i][j];
+                end
+            end
+            for (int i = 0; i < L2_Num_Neuron; i++) begin
+                accel_regs[i] <=  in_data_inter[i];
+            end
+            for (int i = 0; i < L1_Num_Neuron; i++) begin
+                for (int j = 0; j < L2_Num_Neuron; j++) begin
+                bias_reg[i][j] <= bias1_reg[i][j];
+                end
+            end
+            end
+            else begin
+                //first run
+                for (int i = 0; i < L2_Num_Neuron; i++) begin
+                    for (int j = 0; j < L1_Num_Neuron; j++) begin
+                    weights_reg[i][j] <= weights2_reg[i][j];
+                    end
+                end
+                for (int i = 0; i < L1_Num_Neuron; i++) begin
+                    accel_regs[i] <=  in_data_inter2[i];
+                end
+                for (int i = 0; i < L2_Num_Neuron; i++) begin
+                    for (int j = 0; j < L1_Num_Neuron; j++) begin
+                    bias_reg[i][j] <= bias2_reg[i][j];
+                    end
+                end
+                end
+            end
+        else if(state==READ_TO_LEDS)begin 
+            //in_data_inter2 is now read from bram to be the output of the final state.
+            if(btn)begin
+                num_to_show<=num_to_show+1;
+            end
+            leds <= accel_out[num_to_show];
+        end
+            
+    end
+
+endmodule
+
+
+
+
+//     end
+
+// endmodule
+
+module rams_dist (clk, we, a, di, spo);
+
+input clk;
+input we;
+input [5:0] a; 
+input [15:0] di;
+output [15:0] spo;
+
+(* ram_style = "block" *) reg [15:0] ram [624:0];
+
+always @(posedge clk)
+begin
+if (we)
+ram[a] <= di;
+end
+
+assign spo = ram[a];
+
+endmodule
