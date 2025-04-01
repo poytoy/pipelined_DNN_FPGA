@@ -4,7 +4,6 @@ module accelerator#(
 )(
     input logic [15:0] inputs [INPUT_NEURON_COUNT-1:0], // inputs neuron amt of inputs
     input logic [15:0] weights [OUTPUT_NEURON_COUNT*INPUT_NEURON_COUNT-1:0] , // each link between input and output neurons have special weight values.
-    input logic [15:0] biases [OUTPUT_NEURON_COUNT-1:0], //each output neuron has one bias value
     output logic [15:0] out [OUTPUT_NEURON_COUNT-1:0] //output neuron amt of outputs
 
 );
