@@ -129,7 +129,7 @@ module accelerator_piped #(
                 for (int i = 0; i < MAX_PARALLEL; i++) begin
                     int idx = output_batch_idx * MAX_PARALLEL + i;//calculates the output batch index
                     if (idx < OUTPUT_NEURON_COUNT)
-                    out[idx] <= accum[i];//now has the relu outputs in
+                    out[idx] <= accum[i];//now has the relu outputs in.
                 end
             end
 
