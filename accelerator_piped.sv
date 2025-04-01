@@ -15,8 +15,8 @@ module accelerator_piped #(
     output logic done
 );
 
-    typedef enum logic [2:0] {
-        IDLE, LOAD_BATCH, RUN_BATCH, ACCUMULATE, FINALIZE, WRITE_OUT, NEXT_OUTPUT, DONE
+    typedef enum logic [3:0] {
+        IDLE, LOAD_BATCH, RUN_BATCH, ACCUMULATE, FINALIZE, RELU, WRITE_OUT, NEXT_OUTPUT, DONE
     } state_t;
 
     state_t state, next_state;
@@ -30,6 +30,7 @@ module accelerator_piped #(
     logic [15:0] sliced_inputs [MAX_PARALLEL-1:0];
     logic [15:0] sliced_weights [MAX_PARALLEL*MAX_PARALLEL-1:0];
     logic [15:0] partial_outs [MAX_PARALLEL-1:0];
+    logic [15:0] relu_outs [MAX_PARALLEL-1:0];
 
     // Accelerator instantiation (20x20 block)
     accelerator #(
@@ -40,6 +41,15 @@ module accelerator_piped #(
         .weights(sliced_weights),
         .out(partial_outs)
     );
+    genvar r;
+    generate
+        for (r = 0; r < MAX_PARALLEL; r++) begin : relu_inst
+            relu6 relu_unit (
+                .in(accum[r]),
+                .out(relu_outs[r])
+            );
+        end
+    endgenerate
 
     // FSM logic
     always_ff @(posedge clk or posedge rst) begin
@@ -57,7 +67,8 @@ module accelerator_piped #(
                             next_state = FINALIZE;
                         else
                             next_state = LOAD_BATCH;
-            FINALIZE:    next_state = WRITE_OUT;
+            FINALIZE:    next_state = RELU;
+            RELU:        next_state = WRITE_OUT;
             WRITE_OUT: if (output_batch_idx == NUM_OUTPUT_BATCHES - 1)
                             next_state = DONE;
                         else
@@ -108,12 +119,17 @@ module accelerator_piped #(
                         accum[i] <= accum[i] + biases[idx];
                 end
             end
+            RELU: begin
+                for (int i = 0; i < MAX_PARALLEL; i++) begin
+                    accum[i] <= relu_outs[i]; // latch relu output into accum
+                end
+            end
 
             WRITE_OUT: begin
                 for (int i = 0; i < MAX_PARALLEL; i++) begin
                     int idx = output_batch_idx * MAX_PARALLEL + i;//calculates the output batch index
                     if (idx < OUTPUT_NEURON_COUNT)
-                        out[idx] <= accum[i];
+                    out[idx] <= accum[i];//now has the relu outputs in
                 end
             end
 
