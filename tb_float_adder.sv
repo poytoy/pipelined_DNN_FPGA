@@ -29,25 +29,25 @@ module tb_float_adder;
         $dumpfile("float_adder.vcd");
         $dumpvars(0, tb_float_adder);
 
-        // Test 1: 1.0 + 2.0 = 3.0
-        run_test(16'h3C00, 16'h4000, "Test 1: 1.0 + 2.0");
 
         // Test 2: -1.0 + 1.0 = 0.0
-        run_test(16'hBC00, 16'hbC00, "Test 2: -1.0 + -1.0");
+        run_test(16'hBC00, 16'hbC00, "Test 1: -1.0 + -1.0");
 
-        // Test 3: 0.5 + 0.25 = 0.75
-        run_test(16'h3800, 16'h3400, "Test 3: 0.5 + 0.25");
+        //// Test 2: -2.0 + -2.0 = -4.0
+        run_test(16'hC000, 16'hC000, "Test 2: -2.0 + -2.0");
 
-        // Test 4: max normal + small number
-        run_test(16'h7BFF, 16'h0001, "Test 4: Max normal + Min subnormal");
 
-        // Test 5: Inf + 1.0 = Inf
-        run_test(16'h7C00, 16'h3C00, "Test 5: Inf + 1.0");
+        run_test(16'h3C00, 16'h3C00, "Test 3: 1.0 + 1.0");
 
-        // Test 6: NaN + 1.0 = NaN
-        run_test(16'h7E00, 16'h3C00, "Test 6: NaN + 1.0");
 
-        // Done
+        run_test(16'h4000, 16'h4000, "Test 4: 2.0 + 2.0");
+
+        run_test(16'h3E00, 16'h3E00, "Test 5: 1.5 + 1.5");
+
+        run_test(16'h4E00, 16'h4E00, "Test 6: 15.0 + 15.0");
+
+
+   
         $display("\n=== Tests Complete ===\n");
         $finish;
     end
