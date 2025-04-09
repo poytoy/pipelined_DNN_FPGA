@@ -106,7 +106,17 @@ end
         .dina(16'b0),
         .douta(fc3_bias_data)
     );
-    
+    //initiate one_hot_encoder
+    logic [15:0] one_hot_in [ACCEL_OUT_DIM-1:0];  
+    logic [ACCEL_OUT_DIM-1:0] one_hot_out;
+
+    one_hot_encoder #(
+        .N(ACCEL_OUT_DIM)
+    )one_hot(
+    .inputs(one_hot_in),
+    .outputs(one_hot_out)
+    );
+    //accel logic
     logic [15:0] layer0_outputs [LAYER_0_NEURON_COUNT-1:0];  
     logic [15:0] layer1_outputs [LAYER_1_NEURON_COUNT-1:0];
     logic [15:0] layer2_outputs [LAYER_2_NEURON_COUNT-1:0];
@@ -418,16 +428,10 @@ end
                 end
                 
                 FIND_MAX: begin
-                    if (compare_idx < LAYER_3_NEURON_COUNT) begin
-                        if ($signed(layer3_outputs[compare_idx]) > $signed(max_value)) begin
-                            max_value <= layer3_outputs[compare_idx];
-                            max_index <= compare_idx[3:0];
-                        end
-                        compare_idx <= compare_idx + 1;
-                    end else if (current_state != next_state) begin
-                        prediction <= (1 << max_index);
-                    end
+                    one_hot_in <= layer3_outputs;
+                    prediction <= one_hot_out;
                 end
+                       
                 
                 DONE: begin
                     // Remain in done state
