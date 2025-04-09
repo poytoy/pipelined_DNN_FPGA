@@ -51,6 +51,16 @@ module accelerator_piped #(
         end
     endgenerate
 
+    logic [15:0] num1;
+    logic [15:0] num2;
+    logic [15:0] num_out;
+    float_adder add_inst (
+        .num1(num1),
+        .num2(num2),
+        .result(num_out)
+    );
+   
+
     // FSM logic
     always_ff @(posedge clk or posedge rst) begin
         if (rst) state <= IDLE;
@@ -107,7 +117,9 @@ module accelerator_piped #(
 
             ACCUMULATE: begin
                 for (int i = 0; i < MAX_PARALLEL; i++) begin
-                    accum[i] <= accum[i] + partial_outs[i];
+                    num1 <= accum[i];
+                    num2 <= partial_outs[i];
+                    accum[i] <= num_out;
                 end
                 input_batch_idx <= input_batch_idx + 1;
             end
@@ -116,7 +128,9 @@ module accelerator_piped #(
                 for (int i = 0; i < MAX_PARALLEL; i++) begin
                     int idx = output_batch_idx * MAX_PARALLEL + i;//calcualtes indexes of biases
                     if (idx < OUTPUT_NEURON_COUNT)
-                        accum[i] <= accum[i] + biases[idx];
+                    num1 <= accum[i];
+                    num2 <= biases[idx];
+                    accum[i] <= num_out;
                 end
             end
             RELU: begin
