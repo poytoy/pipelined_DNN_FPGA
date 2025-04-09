@@ -1,4 +1,4 @@
-module one_hot_encoder #(
+module one_hot_encode #(
   parameter N = 10  // Default width parameter
 )(
     input logic [15:0] inputs[0:N-1],
@@ -27,11 +27,11 @@ function is_greater;
     if (a == b) begin
       is_greater = 0;
     end
-    // a is positive, b is negative → a > b
+    // a is positive, b is negative ? a > b
     else if (sign_a == 0 && sign_b == 1) begin
       is_greater = 1;
     end
-    // a is negative, b is positive → a < b
+    // a is negative, b is positive ? a < b
     else if (sign_a == 1 && sign_b == 0) begin
       is_greater = 0;
     end
@@ -41,7 +41,7 @@ function is_greater;
       else if (exp_a < exp_b) is_greater = 0;
       else is_greater = (frac_a > frac_b);
     end
-    // both negative → reverse comparison
+    // both negative ? reverse comparison
     else begin
       if (exp_a < exp_b) is_greater = 1;
       else if (exp_a > exp_b) is_greater = 0;
