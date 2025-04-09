@@ -1,7 +1,7 @@
 module top_module #(
-    parameter LAYER_0_NEURON_COUNT = 36,
-    parameter LAYER_1_NEURON_COUNT = 20,
-    parameter LAYER_2_NEURON_COUNT = 20,
+    parameter LAYER_0_NEURON_COUNT = 100,
+    parameter LAYER_1_NEURON_COUNT = 80,
+    parameter LAYER_2_NEURON_COUNT = 40,
     parameter LAYER_3_NEURON_COUNT = 10,
     parameter ACCEL_IN_DIM = 20, 
     parameter ACCEL_OUT_DIM = 20  
@@ -14,10 +14,108 @@ module top_module #(
     logic [15:0] input_data [LAYER_0_NEURON_COUNT-1:0];
 
 initial begin
-    for (int i = 0; i < LAYER_0_NEURON_COUNT; i++) begin
-        input_data[i] = 16'h3D00;  // 1.25 
-    end
+        input_data[0] = 16'h0000;
+        input_data[1] = 16'h0000;
+        input_data[2] = 16'h0000;
+        input_data[3] = 16'h0000;
+        input_data[4] = 16'h0000;
+        input_data[5] = 16'h0000;
+        input_data[6] = 16'h0000;
+        input_data[7] = 16'h0000;
+        input_data[8] = 16'h0000;
+        input_data[9] = 16'h0000;
+        input_data[10] = 16'h0000;
+        input_data[11] = 16'h0000;
+        input_data[12] = 16'h0000;
+        input_data[13] = 16'h0000;
+        input_data[14] = 16'h0000;
+        input_data[15] = 16'h0000;
+        input_data[16] = 16'h0000;
+        input_data[17] = 16'h0000;
+        input_data[18] = 16'h0000;
+        input_data[19] = 16'h0000;
+        input_data[20] = 16'h0000;
+        input_data[21] = 16'h0000;
+        input_data[22] = 16'h0000;
+        input_data[23] = 16'h0000;
+        input_data[24] = 16'h0000;
+        input_data[25] = 16'h0000;
+        input_data[26] = 16'h0000;
+        input_data[27] = 16'h0000;
+        input_data[28] = 16'h0000;
+        input_data[29] = 16'h0000;
+        input_data[30] = 16'h0000;
+        input_data[31] = 16'h0000;
+        input_data[32] = 16'h0000;
+        input_data[33] = 16'h0000;
+        input_data[34] = 16'h3C00;
+        input_data[35] = 16'h3C00;
+        input_data[36] = 16'h3C00;
+        input_data[37] = 16'h3C00;
+        input_data[38] = 16'h0000;
+        input_data[39] = 16'h0000;
+        input_data[40] = 16'h0000;
+        input_data[41] = 16'h0000;
+        input_data[42] = 16'h0000;
+        input_data[43] = 16'h0000;
+        input_data[44] = 16'h0000;
+        input_data[45] = 16'h0000;
+        input_data[46] = 16'h3C00;
+        input_data[47] = 16'h0000;
+        input_data[48] = 16'h0000;
+        input_data[49] = 16'h0000;
+        input_data[50] = 16'h0000;
+        input_data[51] = 16'h0000;
+        input_data[52] = 16'h0000;
+        input_data[53] = 16'h0000;
+        input_data[54] = 16'h0000;
+        input_data[55] = 16'h3C00;
+        input_data[56] = 16'h3C00;
+        input_data[57] = 16'h0000;
+        input_data[58] = 16'h0000;
+        input_data[59] = 16'h0000;
+        input_data[60] = 16'h0000;
+        input_data[61] = 16'h0000;
+        input_data[62] = 16'h0000;
+        input_data[63] = 16'h3C00;
+        input_data[64] = 16'h3C00;
+        input_data[65] = 16'h3C00;
+        input_data[66] = 16'h3C00;
+        input_data[67] = 16'h3C00;
+        input_data[68] = 16'h3C00;
+        input_data[69] = 16'h0000;
+        input_data[70] = 16'h0000;
+        input_data[71] = 16'h0000;
+        input_data[72] = 16'h0000;
+        input_data[73] = 16'h0000;
+        input_data[74] = 16'h3C00;
+        input_data[75] = 16'h0000;
+        input_data[76] = 16'h0000;
+        input_data[77] = 16'h0000;
+        input_data[78] = 16'h0000;
+        input_data[79] = 16'h0000;
+        input_data[80] = 16'h0000;
+        input_data[81] = 16'h0000;
+        input_data[82] = 16'h0000;
+        input_data[83] = 16'h3C00;
+        input_data[84] = 16'h0000;
+        input_data[85] = 16'h0000;
+        input_data[86] = 16'h0000;
+        input_data[87] = 16'h0000;
+        input_data[88] = 16'h0000;
+        input_data[89] = 16'h0000;
+        input_data[90] = 16'h0000;
+        input_data[91] = 16'h0000;
+        input_data[92] = 16'h0000;
+        input_data[93] = 16'h3C00;
+        input_data[94] = 16'h0000;
+        input_data[95] = 16'h0000;
+        input_data[96] = 16'h0000;
+        input_data[97] = 16'h0000;
+        input_data[98] = 16'h0000;
+        input_data[99] = 16'h0000;
 end    
+
     // FSM states
     typedef enum logic [3:0] {
         IDLE,
@@ -107,11 +205,11 @@ end
         .douta(fc3_bias_data)
     );
     //initiate one_hot_encoder
-    logic [15:0] one_hot_in [ACCEL_OUT_DIM-1:0];  
-    logic [ACCEL_OUT_DIM-1:0] one_hot_out;
+    logic [15:0] one_hot_in [LAYER_3_NEURON_COUNT-1:0];  
+    logic [LAYER_3_NEURON_COUNT-1:0] one_hot_out;
 
-    one_hot_encoder #(
-        .N(ACCEL_OUT_DIM)
+    one_hot_encode #(
+        .N(LAYER_3_NEURON_COUNT)
     )one_hot(
     .inputs(one_hot_in),
     .outputs(one_hot_out)
@@ -129,6 +227,7 @@ end
     logic [15:0] accel_out     [ACCEL_OUT_DIM-1:0];
     logic        accel_done;
     logic        start_accel;
+    logic find_max_waiting;
     
     // Instantiate accelerator
     accelerator_piped #(
@@ -232,6 +331,7 @@ end
             bias_delay_counter <= 0;
             weight_delay_active <= 0;
             bias_delay_active <= 0;
+            find_max_waiting <= 0;
         end else begin
             current_state <= next_state;
             
@@ -428,8 +528,15 @@ end
                 end
                 
                 FIND_MAX: begin
-                    one_hot_in <= layer3_outputs;
-                    prediction <= one_hot_out;
+                    if (!find_max_waiting) begin
+                        one_hot_in <= layer3_outputs;
+                        find_max_waiting <= 1;
+                    end 
+                    else begin
+                        // After one cycle delay, capture the one-hot encoded output
+                        prediction <= one_hot_out;
+                        compare_idx <= LAYER_3_NEURON_COUNT;  // This will trigger transition to DONE
+                    end
                 end
                        
                 
