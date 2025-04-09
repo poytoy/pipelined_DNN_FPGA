@@ -69,6 +69,7 @@ module neuron #(
     wire [15:0] weight_array[N-1:0];
     wire [15:0] products[N-1:0];
     wire [15:0] partial_sums[N:0];
+    logic d1,d2,d3,d4,d5,d6;
     
     assign partial_sums[0] = 16'b0; // Initialize sum
 
@@ -80,7 +81,13 @@ module neuron #(
             hp_mul mul (
                 .a(input_array[k]),
                 .b(weight_array[k]),
-                .p(products[k])
+                .p(products[k]),
+                .snan(d1),
+                .qnan(d2),
+                .infinity(d3),
+                .zero(d4),
+                .subnormal(d5),
+                .normal(d6)
             );
         end
     endgenerate
