@@ -144,13 +144,13 @@ end
     logic [14:0] fc3_weight_addr, fc3_bias_addr;
 
     
-    // Delay counters for memory reads
+    
     logic [1:0] weight_delay_counter;
     logic [1:0] bias_delay_counter;
     logic weight_delay_active;
     logic bias_delay_active;
     
-    // BRAM instances: unchanged
+    // BRAM instances
     blk_mem_fcl1_weight fc1_w (
         .clka(clk),
         .ena(1'b1),
@@ -220,7 +220,7 @@ end
     logic [15:0] layer2_outputs [LAYER_2_NEURON_COUNT-1:0];
     logic [15:0] layer3_outputs [LAYER_3_NEURON_COUNT-1:0];
     
-    // Accelerator interface
+
     logic [15:0] accel_inputs  [ACCEL_IN_DIM-1:0];
     logic [15:0] accel_weights [ACCEL_IN_DIM*ACCEL_OUT_DIM-1:0];
     logic [15:0] accel_biases  [ACCEL_OUT_DIM-1:0];
@@ -229,7 +229,7 @@ end
     logic        start_accel;
     logic find_max_waiting;
     
-    // Instantiate accelerator
+
     accelerator_piped #(
         .INPUT_NEURON_COUNT(ACCEL_IN_DIM),
         .OUTPUT_NEURON_COUNT(ACCEL_OUT_DIM),
@@ -257,7 +257,7 @@ end
     logic [3:0] max_index;
     logic [3:0] compare_idx;
     
-    // Next state logic remains unchanged
+
     always_comb begin
         next_state = current_state;
         case (current_state)
@@ -335,7 +335,7 @@ end
         end else begin
             current_state <= next_state;
             
-            // Handle delay counters
+
             if (weight_delay_active) begin
                 if (weight_delay_counter < 2) begin  // Wait for 3 cycles (0,1,2)
                     weight_delay_counter <= weight_delay_counter + 1;
@@ -373,7 +373,7 @@ end
                     end
                 end
                 
-                // Modified LOAD_LAYER1_WEIGHTS with delay
+
                 LOAD_LAYER1_WEIGHTS: begin
                     if (weight_load_idx < ACCEL_IN_DIM * ACCEL_OUT_DIM) begin
                         if (!weight_delay_active) begin
@@ -423,7 +423,7 @@ end
                     end
                 end
                 
-                // Modified LOAD_LAYER2_WEIGHTS with delay
+
                 LOAD_LAYER2_WEIGHTS: begin
                     if (weight_load_idx < ACCEL_IN_DIM * ACCEL_OUT_DIM) begin
                         if (!weight_delay_active) begin
@@ -473,7 +473,7 @@ end
                     end
                 end
                 
-                // Modified LOAD_LAYER3_WEIGHTS with delay
+
                 LOAD_LAYER3_WEIGHTS: begin
                     if (weight_load_idx < ACCEL_IN_DIM * ACCEL_OUT_DIM) begin
                         if (!weight_delay_active) begin
@@ -533,9 +533,9 @@ end
                         find_max_waiting <= 1;
                     end 
                     else begin
-                        // After one cycle delay, capture the one-hot encoded output
+
                         prediction <= one_hot_out;
-                        compare_idx <= LAYER_3_NEURON_COUNT;  // This will trigger transition to DONE
+                        compare_idx <= LAYER_3_NEURON_COUNT; 
                     end
                 end
                        
